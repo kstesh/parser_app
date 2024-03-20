@@ -1,6 +1,7 @@
 import pandas as pd
 from AParser import AParser
 from bs4 import BeautifulSoup
+import selenium
 from selenium import webdriver
 from selenium.common import NoSuchElementException
 from selenium.webdriver.common.by import By
@@ -12,60 +13,48 @@ from unidecode import unidecode
 class ParserProm(AParser):
 
     def __init__(self, term, status=0):
-        """
-        Initializes the ParserProm object.
-
-        Parameters:
-        - term (str): The search term.
-        - status (int): 0 - with marketplace`s search usage, 1 - by url.
-        """
         self._term = term
         self._status = status
         self._driver = None
 
     def search(self) -> pd.DataFrame:
-        """
-        Performs a search on prom.ua, retrieves contact information for each company,
-        and returns the information in a pandas DataFrame.
-
-        Returns:
-        - pd.DataFrame: The DataFrame containing contact information.
-        """
-
         # create webdriver
         options = webdriver.FirefoxOptions()
         options.add_argument('-headless')
         options.add_argument("--incognito")
         options.add_argument("--window-size=1280,800")
         options.set_preference("permissions.default.image", 2)
-        self._driver = webdriver.Firefox(options=options)
-        print("Driver created")
+        try:
+            self._driver = webdriver.Firefox(options=options)
+            print("Driver created")
 
-        shop_list = self.__get_shops_list()
-        contacts_list = list()
-        print(shop_list)
+            shop_list = self.__get_shops_list()
+            contacts_list = list()
 
-        for shop in shop_list:
-            print(f"processing {shop}...")
-            try:
-                contacts_list.append(self.__get_contacts(shop))
-            except:
-                pass
+            if len(shop_list) == 0:
+                raise ValueError
 
-        print(contacts_list)
-        self._driver.quit()
+            for shop in shop_list:
+                print(f"processing {shop}...")
+                try:
+                    contacts_list.append(self.__get_contacts(shop))
+                except:
+                    # seller is closed, so skip
+                    pass
+
+            print(contacts_list)
+        except selenium.common.exceptions.SessionNotCreatedException:
+            raise ChildProcessError
+        finally:
+            if self._driver is not None:
+                self._driver.quit()
         return pd.DataFrame(contacts_list)
 
     def __get_shops_list(self) -> set:
-        """
-        Retrieves a set of company page URLs based on the search term.
-
-        Returns:
-        - set: A set of company page URLs.
-        """
         if self._status == 0:
-            request_url_list = [f"https://prom.ua/ua/search?search_term={self._term.replace(' ', '%20')}",
-                            f"https://prom.ua/ua/search?search_term={ParserProm.__cyrillic_to_latin(self._term, '-')}"]
+            request_url_list = \
+                [f"https://prom.ua/ua/search?search_term={self._term.replace(' ', '%20')}",
+                 f"https://prom.ua/ua/search?search_term={ParserProm.__cyrillic_to_latin(self._term, '-')}"]
         else:
             request_url_list = [self._term]
         company_pages = set()
@@ -73,8 +62,8 @@ class ParserProm(AParser):
         attempt_10 = 0
         start_attempt = 0
         max_attempts = 2
-        for patern_url in request_url_list:
-            current_request_url = patern_url
+        for pattern_url in request_url_list:
+            current_request_url = pattern_url
             while cont:
                 # scroll down
                 self._driver.get(current_request_url)
@@ -91,7 +80,8 @@ class ParserProm(AParser):
                         if attempt_10 <= max_attempts:
                             WebDriverWait(self._driver, 10).until(
                                 lambda driver: len(driver.find_elements(By.XPATH,
-                                                                        "//div[@data-qaid='product_block']")) > initial_loaded_count)
+                                                                        "//div[@data-qaid='product_block']"
+                                                                        )) > initial_loaded_count)
                         elem = WebDriverWait(self._driver, 2).until(
                             EC.presence_of_element_located((By.XPATH, "//div[@data-qaid = 'product_gallery']")))
 
@@ -147,8 +137,8 @@ class ParserProm(AParser):
 
     def __ps_with_bs(self, elem, company_pages):
         # parse with bsoup
-        product_banch = BeautifulSoup(elem.get_attribute('innerHTML'), "html.parser")
-        product_list = product_banch.find_all("div", {"data-qaid": "product_block"})
+        product_bench = BeautifulSoup(elem.get_attribute('innerHTML'), "html.parser")
+        product_list = product_bench.find_all("div", {"data-qaid": "product_block"})
         print(len(product_list))
         for product in product_list:
             elem = product.find("div", {"class": "M3v0L BXDW- qzGRQ aO9Co"})
@@ -169,15 +159,6 @@ class ParserProm(AParser):
             return cont
 
     def __get_contacts(self, url: str) -> dict:
-        """
-        Retrieves contact information from the company page.
-
-        Parameters:
-        - url (str): The URL of the company page.
-
-        Returns:
-        - dict: A dictionary containing contact information.
-        """
         wait = WebDriverWait(self._driver, 2)
         self._driver.get(url)
 
@@ -224,6 +205,7 @@ class ParserProm(AParser):
         latin_text_with_underscores = latin_text.replace(' ', replace_to)
 
         return latin_text_with_underscores
+
 
 def testPromParser():
     a = ParserProm("однострій пласт").search()

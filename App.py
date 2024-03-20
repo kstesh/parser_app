@@ -4,7 +4,6 @@ from tkinter import filedialog
 from Processor import Processor
 
 
-
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -48,17 +47,31 @@ class App(tk.Tk):
         self.path_entry.insert(0, folder_path)
 
     def search_data(self):
-        self.result_label.config(text="Почалась обробка!")
+        self.result_label.config(text="Почалась обробка!", justify="left")
         term = self.term_entry.get()
         path = self.path_entry.get()
 
         is_empty = lambda s: len(s) == 0 or s.isspace() or not re.search(r'[a-zA-Z0-9\u0400-\u04FF]', s)
+
         if is_empty(term) or is_empty(path):
-            self.result_label.config(text="Запит або шлях некоректний")
+            self.result_label.config(text="Запит або шлях некоректний", justify="left")
         else:
             processor = Processor()
-            processor.search_data(term, path)
-            self.result_label.config(text="Обробку закінчено!")
+            try:
+                processor.search_data(term, path)
+                self.result_label.config(text="Обробку закінчено!", justify="left")
+            except ChildProcessError:
+                self.result_label.config(text="Виникла помилка під час обробки:( \n" +
+                                              "Зверніться в тех підтримку\n0931513597", justify="left")
+            except OSError:
+                self.result_label.config(text="Не грайтесь із долею, перевірте шлях", justify="left")
+            except RecursionError:
+                self.result_label.config(text="Досягнуто ліміту перезавантажень, повторіть спробу", justify="left")
+            except ValueError:
+                self.result_label.config(text="Жоден контакт не зібрано.\nПеревірте запит і повторіть спробу",
+                                         justify="left")
+            finally:
+                self.search_button.config(text="Retry", command=self.retry_search, justify="left")
 
     def handle_key_release(self, event, entry):
         # Обробник події відпускання клавіші
@@ -70,6 +83,11 @@ class App(tk.Tk):
         text = self.clipboard_get()
         if entry:
             entry.insert(tk.INSERT, text)
+
+    def retry_search(self):
+        self.term_entry.delete(0, tk.END)
+        self.search_button.config(text="Search", command=self.search_data)
+        self.result_label.config(text="")
 
     @staticmethod
     def _onKeyRelease(event):

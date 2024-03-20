@@ -5,7 +5,7 @@ from urllib.parse import unquote
 import re
 
 
-def resource_path(relative_path):
+def resource_path(relative_path) -> str:
     try:
         base_path = sys._MEIPASS2
     except Exception:
@@ -15,7 +15,7 @@ def resource_path(relative_path):
 
 
 class SheetManager:
-    def update_sheet(self, sheet: pd.DataFrame, path: str, term: str) -> None:
+    def update_sheet(self, sheet: pd.DataFrame, received_path: str, term: str) -> None:
         """
         Updates the existing sheet or saves a new sheet to the specified path with the given name.
 
@@ -24,24 +24,25 @@ class SheetManager:
         - path (str): The directory path to save the sheet.
         - name (str): The name of the Excel file (without extension).
         """
-        if sheet is None or sheet.shape==(0,0):
+        if sheet is None or sheet.shape == (0, 0):
             return
-        name = re.sub(r'[^a-zA-Z0-9\u0400-\u04FF_]', '', unquote(term))
-        print(name)
-        file_path = os.path.join(path, f"{name}.xlsx")
-        os.makedirs(path, exist_ok=True)
+        file_name = re.sub(r'[^a-zA-Z0-9\u0400-\u04FF]', '', unquote(term))
+        print(file_name)
+        file_path = os.path.join(received_path, f"{file_name}.xlsx")
+        os.makedirs(received_path, exist_ok=True)
         if os.path.isfile(file_path):
             old_sheet = pd.read_excel(file_path)
             if old_sheet.shape != (0, 0):
-                updated_sheet = self.__union_sheets(old_sheet, sheet)
+                updated_sheet = SheetManager.__union_sheets(old_sheet, sheet)
             else:
                 updated_sheet = sheet
         else:
             updated_sheet = sheet
 
-        self.__save_sheet(updated_sheet, path, name)
+        SheetManager.__save_sheet(updated_sheet, received_path, file_name)
 
-    def __union_sheets(self, old_sheet: pd.DataFrame, new_sheet: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def __union_sheets(old_sheet: pd.DataFrame, new_sheet: pd.DataFrame) -> pd.DataFrame:
         """
         Unions (concatenates) two DataFrames vertically without duplicating rows.
 
@@ -56,7 +57,8 @@ class SheetManager:
         unique_rows = pd.concat([old_sheet, new_sheet.loc[~new_sheet.index.isin(common_rows.index)]], ignore_index=True)
         return unique_rows
 
-    def __save_sheet(self, sheet: pd.DataFrame, path: str, name: str) -> None:
+    @staticmethod
+    def __save_sheet(sheet: pd.DataFrame, sheet_path: str, sheet_name: str) -> None:
         """
         Saves the given sheet to the specified path with the given name.
 
@@ -66,13 +68,12 @@ class SheetManager:
         - name (str): The name of the Excel file (without extension).
         """
 
-        sheet.to_excel(os.path.join(path, f"{name}.xlsx"), index=False)
+        sheet.to_excel(os.path.join(sheet_path, f"{sheet_name}.xlsx"), index=False)
 
     @staticmethod
-    def save_current_path(path) -> None:
+    def save_current_path(last_used_path) -> None:
         with open(resource_path('parser_save_to_path.txt'), 'w') as file:
-            text_to_save = path
-            file.write(text_to_save)
+            file.write(last_used_path)
 
     @staticmethod
     def get_last_path() -> str:
@@ -84,6 +85,7 @@ class SheetManager:
             return path_from_file
         else:
             return 'Select path!!!'
+
 
 if __name__ == "__main__":
     # Create a SheetManager instance
