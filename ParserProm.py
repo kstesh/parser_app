@@ -52,76 +52,120 @@ class ParserProm(AParser):
 
     def __get_shops_list(self) -> set:
         if self._status == 0:
-            request_url_list = \
-                [f"https://prom.ua/ua/search?search_term={self._term.replace(' ', '%20')}",
-                 f"https://prom.ua/ua/search?search_term={ParserProm.__cyrillic_to_latin(self._term, '-')}"]
+            pattern_url = f"https://prom.ua/ua/search?search_term={self._term.replace(' ', '%20')}"
         else:
-            request_url_list = [self._term]
+            pattern_url = self._term
         company_pages = set()
         cont = True
         attempt_10 = 0
         start_attempt = 0
         max_attempts = 2
-        for pattern_url in request_url_list:
-            current_request_url = pattern_url
-            while cont:
-                # scroll down
-                self._driver.get(current_request_url)
 
-                initial_loaded_count = len(self._driver.find_elements(By.XPATH, "//div[@data-qaid='product_block']"))
-                print(f"Initial loaded: {initial_loaded_count}")
+        while cont:
+            # scroll down
+            self._driver.get(pattern_url)
 
-                if initial_loaded_count == 10:
+            initial_loaded_count = len(self._driver.find_elements(By.XPATH, "//div[@data-qaid='product_block']"))
+            print(f"Initial loaded: {initial_loaded_count}")
 
-                    self._driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            if initial_loaded_count == 10:
+
+                self._driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                try:
+                    # Wait for the loaded elements to change
+                    print("start scrolling")
+                    if attempt_10 <= max_attempts:
+                        WebDriverWait(self._driver, 10).until(
+                            lambda driver: len(driver.find_elements(By.XPATH,
+                                                                    "//div[@data-qaid='product_block']"
+                                                                    )) > initial_loaded_count)
+                    elem = WebDriverWait(self._driver, 2).until(
+                        EC.presence_of_element_located((By.XPATH, "//div[@data-qaid = 'product_gallery']")))
+
+                    res = self.__ps_with_bs(elem, company_pages)
+                    attempt_10 = start_attempt
+                    if res == 0:
+                        cont = False
+                    else:
+                        pattern_url = res
+                except:
+                    print("Fail to load all data. Try again...")
+                    attempt_10 += 1
+
+            else:
+
+                try:
+                    elem = WebDriverWait(self._driver, 2).until(
+                        EC.presence_of_element_located((By.XPATH, "//div[@data-qaid = 'product_gallery']"))
+                    )
+                    res = self.__ps_with_bs(elem, company_pages)
+                    if res == 0:
+                        cont = False
+                    else:
+                        pattern_url = res
+
+                except:
+                    self.__change_to_visible_driver()
+                    self._driver.get(pattern_url)
                     try:
-                        # Wait for the loaded elements to change
-                        print("start scrolling")
-                        if attempt_10 <= max_attempts:
-                            WebDriverWait(self._driver, 10).until(
-                                lambda driver: len(driver.find_elements(By.XPATH,
-                                                                        "//div[@data-qaid='product_block']"
-                                                                        )) > initial_loaded_count)
-                        elem = WebDriverWait(self._driver, 2).until(
-                            EC.presence_of_element_located((By.XPATH, "//div[@data-qaid = 'product_gallery']")))
-
-                        res = self.__ps_with_bs(elem, company_pages)
-                        attempt_10 = start_attempt
-                        if res == 0:
-                            cont = False
-                        else:
-                            current_request_url = res
-                    except:
-                        print("Fail to load all data. Try again...")
-                        attempt_10 += 1
-
-                else:
-
-                    try:
-                        elem = WebDriverWait(self._driver, 2).until(
+                        WebDriverWait(self._driver, 60).until(
                             EC.presence_of_element_located((By.XPATH, "//div[@data-qaid = 'product_gallery']"))
                         )
-                        res = self.__ps_with_bs(elem, company_pages)
-                        if res == 0:
-                            cont = False
-                        else:
-                            current_request_url = res
-
+                        print("well done")
                     except:
-                        self.__change_to_visible_driver()
-                        self._driver.get(current_request_url)
-                        try:
-                            WebDriverWait(self._driver, 60).until(
-                                EC.presence_of_element_located((By.XPATH, "//div[@data-qaid = 'product_gallery']"))
-                            )
-                            print("well done")
-                        except:
-                            # error exit
-                            print("Captcha error...")
-                            print("driver quit")
-                            self._driver.quit()
+                        # error exit
+                        print("Captcha error...")
+                        print("driver quit")
+                        self._driver.quit()
 
-                            return company_pages
+                        return company_pages
+
+        return company_pages
+
+    def __get_shops_list_by_filters(self) -> set:
+        # data-qaid="filter_popup"
+        #
+        if self._status == 0:
+            pattern_url = f"https://prom.ua/ua/search?search_term={self._term.replace(' ', '%20')}"
+        else:
+            pattern_url = self._term
+        company_pages = set()
+        cont = True
+        attempt_10 = 0
+        start_attempt = 0
+        max_attempts = 2
+
+        while cont:
+            # scroll down
+            self._driver.get(pattern_url)
+
+            self._driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+
+            try:
+                elem = WebDriverWait(self._driver, 2).until(
+                    EC.presence_of_element_located((By.XPATH, "//div[@data-qaid = 'product_gallery']"))
+                )
+                res = self.__ps_with_bs(elem, company_pages)
+                if res == 0:
+                    cont = False
+                else:
+                    pattern_url = res
+
+            except:
+                self.__change_to_visible_driver()
+                self._driver.get(pattern_url)
+                try:
+                    WebDriverWait(self._driver, 60).until(
+                        EC.presence_of_element_located((By.XPATH, "//div[@data-qaid = 'product_gallery']"))
+                    )
+                    print("well done")
+                except:
+                    # error exit
+                    print("Captcha error...")
+                    print("driver quit")
+                    self._driver.quit()
+
+                    return company_pages
 
         return company_pages
 
@@ -208,7 +252,7 @@ class ParserProm(AParser):
 
 
 def testPromParser():
-    a = ParserProm("однострій пласт").search()
+    a = ParserProm("osprey").search()
     print(a)
 
 

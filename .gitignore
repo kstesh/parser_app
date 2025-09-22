@@ -1,0 +1,8 @@
+dist/
+build/
+Assets/
+.idea/
+*.ico
+*.spec
+parser_save_to_path.txt
+__pycache__/
